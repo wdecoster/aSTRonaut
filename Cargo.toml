@@ -1,0 +1,21 @@
+[package]
+name = "astronaut"
+version = "1.0.0"
+edition = "2021"
+description = "Rust implementation of the aSTRonaut tandem repeat visualization tool"
+license = "MIT"
+repository = "https://github.com/wdecoster/aSTRonaut"
+
+[[bin]]
+name = "aSTRonaut"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+flate2 = "1"
+noodles-vcf = "0.88"
+kuva = { version = "0.3", features = ["png", "pdf"] }
+
+[profile.release]
+lto = true
