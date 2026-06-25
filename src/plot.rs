@@ -64,6 +64,21 @@ fn motif_key(seq: &str, kmers: &[&str]) -> Vec<f64> {
         .collect()
 }
 
+/// Order two sequences by motif composition: descending fraction of the first
+/// motif, then the second, and so on (the same ordering used by
+/// `SortMode::Motif`).
+fn motif_cmp(a: &str, b: &str, kmers: &[&str]) -> std::cmp::Ordering {
+    let ka = motif_key(a, kmers);
+    let kb = motif_key(b, kmers);
+    for (x, y) in ka.iter().zip(kb.iter()) {
+        match y.partial_cmp(x).unwrap_or(std::cmp::Ordering::Equal) {
+            std::cmp::Ordering::Equal => continue,
+            o => return o,
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
 /// Color every nucleotide of `seq` by the kmer that covers it, replicating the
 /// successive string-replacement semantics of the Python code. Returns one
 /// color token per nucleotide.
@@ -331,7 +346,20 @@ fn build_collapsed_scene(
         .collect();
 
     let refs: Vec<&RepeatRecord> = records.iter().collect();
-    let clusters = collapse(&refs, threshold);
+    let mut clusters = collapse(&refs, threshold);
+    // Within equal counts, order clusters by the chosen --sort key (length,
+    // representative sequence, or motif composition) instead of an arbitrary
+    // string order, so same-count rows are grouped sensibly.
+    let kmer_list: Vec<&str> = kmer_colors.iter().map(|(k, _)| k.as_str()).collect();
+    match args.sort {
+        SortMode::Length => clusters.sort_by_key(|c| c.representative.len()),
+        SortMode::Alphabetic => clusters.sort_by(|a, b| a.representative.cmp(&b.representative)),
+        SortMode::Motif => {
+            clusters.sort_by(|a, b| motif_cmp(&a.representative, &b.representative, &kmer_list))
+        }
+    }
+    // Stable sort by count (descending) keeps the secondary key within ties.
+    clusters.sort_by_key(|c| std::cmp::Reverse(c.count));
     // `collapse` returns most-abundant-first; reverse so the highest count is
     // the top row (y categories run bottom-to-top).
     let display: Vec<&Cluster> = clusters.iter().rev().collect();
