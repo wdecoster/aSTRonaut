@@ -95,6 +95,15 @@ If aSTRonaut was useful for your work, please cite our publication:
 > De Coster *et al.*, *Genome Research* (2024).
 > <https://genome.cshlp.org/content/34/11/2074>
 
+## How this was built
+
+In the interest of transparency: this Rust port was not written by hand. The
+code was written and tested by [Claude](https://claude.com/claude-code),
+Anthropic's coding agent, working under the supervision of
+[Wouter De Coster](https://github.com/wdecoster) — who directed the design,
+decided what the tool should do and which features to add, and reviewed the
+result.
+
 ## Acknowledgements
 
 Plots are rendered with [kuva](https://psy-fer.github.io/kuva/), VCFs are parsed
