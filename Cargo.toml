@@ -1,6 +1,6 @@
 [package]
 name = "astronaut"
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
 description = "Rust implementation of the aSTRonaut tandem repeat visualization tool"
 license = "MIT"
