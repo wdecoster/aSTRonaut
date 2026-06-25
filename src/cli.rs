@@ -52,7 +52,7 @@ pub enum SortMode {
 #[derive(Debug, Parser)]
 #[command(
     name = "aSTRonaut",
-    version = "1.0",
+    version = env!("CARGO_PKG_VERSION"),
     about = "Create a repeat sequence plot similar to the pathSTR sequence composition visualization, but stand-alone"
 )]
 pub struct Args {

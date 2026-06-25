@@ -1,106 +1,103 @@
 # aSTRonaut
 
-Rust implementation of the aSTRonaut tandem repeat visualization tool.
+[![test](https://github.com/wdecoster/aSTRonaut/actions/workflows/test.yml/badge.svg)](https://github.com/wdecoster/aSTRonaut/actions/workflows/test.yml)
 
-aSTRonaut creates a stand-alone "barcode" plot of the kmer composition of short
-tandem repeats (STRs), similar to the pathSTR sequence composition visualization.
-It reads STR genotyper VCFs (e.g. [STRdust](https://github.com/wdecoster/STRdust),
-LongTR) or a TSV table, picks the most frequent kmers (collapsing rotationally
-equivalent motifs), and draws one row per sample/allele with every nucleotide
-coloured by the kmer that covers it.
+Visualise the motif composition of short tandem repeats (STRs) as a "barcode"
+plot: one row per sample/allele, with every nucleotide coloured by the repeat
+motif that covers it. It reads VCFs from STR genotypers
+([STRdust](https://github.com/wdecoster/STRdust), LongTR) or a simple TSV table,
+and writes interactive HTML or static images.
 
-Plotting is done with [kuva](https://psy-fer.github.io/kuva/); VCF parsing uses
-[noodles](https://github.com/zaeleus/noodles). The result is a single static
-binary with no Python/Plotly/kaleido runtime.
+This is a fast, dependency-free reimplementation (a single binary, no Python
+needed) of the sequence-composition view from
+[pathSTR](https://pathstr.bioinf.be/).
 
-## Build
+![Example: RFC1 motif composition across a cohort](docs/example_rfc1.png)
+
+## Installation
+
+Download a prebuilt binary for your platform from the
+[releases page](https://github.com/wdecoster/aSTRonaut/releases) (Linux,
+static Linux/musl, and macOS), make it executable, and put it on your `PATH`.
+
+Or build from source with a [Rust toolchain](https://rustup.rs/):
 
 ```bash
-cargo build --release
-# binary at target/release/aSTRonaut
+cargo install --path .
+# or: cargo build --release  → target/release/aSTRonaut
 ```
 
-## Usage
+## Quick start
 
 ```bash
-# One repeat from several VCFs, interactive HTML (default)
-aSTRonaut sample1.vcf.gz sample2.vcf.gz --repeat chr1:57367043 -o out.html
+# One repeat from several samples → interactive HTML (default)
+aSTRonaut *.vcf.gz --repeat chr4:39348424 -o rfc1.html
 
-# Let aSTRonaut detect the motif length per repeat
-aSTRonaut *.vcf.gz -k auto -o plot.png
+# Let aSTRonaut pick the motif length for each repeat
+aSTRonaut *.vcf.gz -k auto -o plots.png
 
-# Static image of a single repeat
-aSTRonaut *.vcf.gz --repeat chr1:57367043 -o plot.png
+# Cluster rows by motif so similar alleles group together
+aSTRonaut *.vcf.gz --repeat chr4:39348424 --sort motif -o rfc1.png
 
-# All repeats found in the VCFs (one file per repeat for image formats)
-aSTRonaut sample.vcf.gz -o plot.svg
+# Collapse identical alleles into a haplotype-frequency view
+aSTRonaut *.vcf.gz --repeat chr4:39348424 --collapse -o rfc1_collapsed.html
 
-# From a TSV table with name, sequence and optional group columns
-aSTRonaut --table sequences.tsv -o plot.png
-
-# Publication styling, with case/control annotation
-aSTRonaut *.vcf.gz --repeat chr1:57367043 \
-    --sampleinfo info.tsv --publication --title "STR composition" -o fig.pdf
+# Publication-ready figure
+aSTRonaut *.vcf.gz --repeat chr9:27573484 --publication -o c9orf72.pdf
 ```
 
-### Key options
+In the interactive HTML, hover a segment to see its sample, motif and position,
+and use the search box to highlight a sample or a motif.
 
-- `-k/--kmer`, `-n/--number`: kmer length and how many kmers to colour.
-  Pass `-k auto` to **detect the repeat period per locus** from the data
-  (ported from [trout](https://github.com/wdecoster/trout)): for each repeat it
-  picks the smallest period 2–6 whose self-shift match rate clears 0.65,
-  cross-checking the reference allele (VCF REF) against the median-length allele
-  and falling back to 3 when no clean period is found (with `--table` input,
-  which has no REF, detection rests on the median allele alone). The chosen k is
-  reported per locus on stderr.
-- `--motifs`: colour specific motifs instead of the most frequent ones.
-- `-m/--minlen`: minimum allele length to plot.
-- `--repeat chr:pos`: restrict to one repeat coordinate.
-- `--sort`: row ordering — `length` (default), `alphabetic`, or `motif`.
-  **Motif clusters rows by composition**, so alleles dominated by the same motif
-  group together (e.g. RFC1 `AAGGG` expansions cluster apart from the benign
-  `AAAAG` alleles).
-- `--collapse`: collapse identical sequences into one row per unique haplotype,
-  with a marginal **allele-count histogram** beside the barcode (stacked
-  case/control when `--sampleinfo` is given). Bare `--collapse` merges only exact
-  duplicates; `--collapse=0.05` also merges sequences within 5% normalized edit
-  distance (greedy, abundance-first, banded edit distance) to absorb sequencing
-  error. Rows are ordered by count, most abundant at the top.
-- `--somatic`: read per-read sequences from the `SEQS` INFO field.
-- `--longest_only`: keep only the longest allele per individual.
-- `--sampleinfo`: TSV (`name`, `group`) marking `case` samples with `>>>`.
-- `--publication` / `--minimal`: publication-ready styling.
-- `--hide-labels`, `--hide_allele_label`, `--label_size`,
-  `--size`, `--legend_corner`, `--width`, `--title`.
-- `--height`: plot height in pixels. If omitted, it **auto-scales with the
-  number of rows** (~22 px/row, minimum 800) so labels stay legible for large
-  cohorts; pass a value to override.
+## Options
 
-## Output formats
+Run `aSTRonaut --help` for the full list. The most useful:
+
+| Option | What it does |
+|--------|--------------|
+| `--repeat chr:pos` | Plot a single repeat coordinate (default: all repeats found) |
+| `-k, --kmer` | Motif length to colour by (default 3). Use `-k auto` to detect it per repeat |
+| `-n, --number` | How many distinct motifs to colour (default 10) |
+| `--motifs AAAAG,AAGGG` | Colour these specific motifs instead of the most frequent ones |
+| `--sort` | Row order: `length` (default), `alphabetic`, or `motif` (cluster by composition) |
+| `--collapse[=FRAC]` | Collapse identical alleles into one row with an allele-count panel; `--collapse=0.05` also merges near-identical sequences (handles sequencing error) |
+| `--sampleinfo FILE` | TSV (`name`, `group`) marking `case` samples; splits the collapse counts into case/control |
+| `--somatic` | Plot per-read sequences (from the `SEQS` field of somatic VCFs) |
+| `-m, --minlen` | Minimum allele length to plot (default 20) |
+| `--publication` / `--minimal` | Cleaner styling for figures |
+| `--title`, `--height`, `--width`, `--size`, `--legend_corner`, `--hide-labels` | Appearance tweaks |
+
+Height auto-scales with the number of samples, so labels stay legible for large
+cohorts.
+
+## Input and output
+
+**Input** is one or more single-sample VCFs (plain or bgzip-compressed) with
+`CHROM`, `POS`, `ALT` and a `GT` genotype, or a TSV table (`--table`) with `name`
+and `sequence` columns.
+
+**Output** format is chosen from the file extension:
 
 | Extension | Output |
 |-----------|--------|
-| `.html`   | Interactive SVG(s) embedded in one HTML page; all repeats in one file |
-| `.svg`    | Static SVG; one file per repeat |
-| `.png`    | Static PNG; one file per repeat |
-| `.pdf`    | Static PDF; one file per repeat |
+| `.html` | Interactive plot (hover + search), all repeats in one file |
+| `.svg` / `.png` / `.pdf` | Static image, one file per repeat |
 
-Each row is drawn as a **run-length-encoded bar** (consecutive same-motif
-nucleotides collapse into one segment), so files stay small even for long
-expansions — a 150-allele RFC1 plot drops from ~20 MB to <1 MB.
+## Citation
 
-> **Note on interactivity:** the original Python tool produced an interactive
-> Plotly HTML by default. kuva renders a self-contained interactive *SVG*
-> instead, embedded in an HTML wrapper for the `.html` output (no JavaScript
-> CDN). **Hover** a segment for `sample · motif · position`; use the **search
-> box** (top-left) to filter — type a sample name to locate that individual's
-> row, or a motif to highlight where it occurs. The legend is a static colour
-> key. `jpeg`/`webp` outputs from the Python version are not supported; use
-> `png` or `pdf`.
+If aSTRonaut was useful for your work, please cite our publication:
 
-## Input
+> De Coster *et al.*, *Genome Research* (2024).
+> <https://genome.cshlp.org/content/34/11/2074>
 
-VCF (single sample, plain or BGZF-compressed) with `CHROM`, `POS`, `ALT` and a
-`GT` genotype. Somatic mode additionally reads the `SEQS` (and optional
-`OUTLIERS`) INFO fields. TSV input requires `name` and `sequence` columns and an
-optional `group` column (where the value `case` drives the annotation).
+## Acknowledgements
+
+Plots are rendered with [kuva](https://psy-fer.github.io/kuva/), VCFs are parsed
+with [noodles](https://github.com/zaeleus/noodles), and the motif-length
+detection is ported from [trout](https://github.com/wdecoster/trout). Example
+plots use data from the [pathSTR](https://pathstr.bioinf.be/) database.
+
+## Further reading
+
+Implementation details (motif detection, collapsing, rendering) are documented in
+[docs/internals.md](docs/internals.md).

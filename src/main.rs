@@ -23,7 +23,9 @@ use model::RepeatRecord;
 fn main() {
     let args = Args::parse();
     if let Err(e) = run(&args) {
-        eprintln!("ERROR: {e}");
+        // `{:#}` prints the full anyhow context chain, e.g.
+        // "opening sample.vcf.gz: No such file or directory".
+        eprintln!("ERROR: {e:#}");
         std::process::exit(1);
     }
 }

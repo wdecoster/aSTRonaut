@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn exact_collapse_counts() {
-        let r = vec![
+        let r = [
             rec("AAAAT", false),
             rec("AAAAT", true),
             rec("AAAAT", false),

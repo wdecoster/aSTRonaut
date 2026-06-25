@@ -1,0 +1,72 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  publish:
+    name: Publish for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        name: [
+            linux,
+            linux-musl,
+            macos
+        ]
+
+        include:
+          - name: linux
+            os: ubuntu-latest
+            artifact_name: target/release/aSTRonaut
+            asset_name: aSTRonaut-linux
+          - name: linux-musl
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact_name: target/x86_64-unknown-linux-musl/release/aSTRonaut
+            asset_name: aSTRonaut-linux-musl
+            use_cross: true
+          - name: macos
+            os: macos-latest
+            artifact_name: target/release/aSTRonaut
+            asset_name: aSTRonaut-macos
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install Cross
+      if: matrix.use_cross
+      run: cargo install cross --git https://github.com/cross-rs/cross
+
+    - name: Build (Standard)
+      if: '!matrix.use_cross'
+      run: cargo build --release ${{ matrix.target && format('--target {0}', matrix.target) || '' }} --locked
+
+    - name: Build (Cross)
+      if: matrix.use_cross
+      run: LIBZ_SYS_STATIC=1 cross build --target ${{ matrix.target }} --release --locked
+
+    - name: Verify MUSL binary is static
+      if: matrix.use_cross
+      run: |
+        file ${{ matrix.artifact_name }}
+        ldd ${{ matrix.artifact_name }} || true
+
+    - name: Test release build
+      if: '!matrix.use_cross'
+      run: cargo test --release
+
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: ${{ matrix.artifact_name }}
+        asset_name: ${{ matrix.asset_name }}
+        tag: ${{ github.ref }}
