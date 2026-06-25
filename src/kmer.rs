@@ -15,37 +15,67 @@ pub const AUTO_K_MAX: usize = 6;
 /// Fallback when no clean period is recoverable (trinucleotide repeats are the
 /// most common pathogenic motif length).
 pub const AUTO_K_DEFAULT: usize = 3;
-/// Match-rate threshold for `detect_period`: a pure tandem repeat scores 1.0,
-/// and 0.65 still recovers GC-rich hexamer repeats whose self-shift rate is
-/// suppressed by composition bias (e.g. C9orf72 GGCCCC).
-const PERIOD_MATCH_THRESHOLD: f64 = 0.65;
+/// Composition-corrected self-shift threshold for `detect_period`. The raw
+/// self-shift rate is inflated by base-composition bias (an A-rich motif matches
+/// itself often just because most bases are A), which made short periods clear a
+/// raw threshold spuriously. We instead score the rate *above chance*,
+/// `(observed - chance) / (1 - chance)`, so composition cancels out: a pure
+/// tandem repeat still scores ~1.0, GC-rich hexamers (C9orf72 GGCCCC) clear it,
+/// and A-rich motifs no longer match at short periods. 0.30 is low enough to
+/// keep recovering impure/biased repeats while rejecting chance-level periods.
+const PERIOD_SCORE_THRESHOLD: f64 = 0.30;
 
-/// Detect the dominant tandem-repeat period in `seq` by counting positions where
-/// `seq[i] == seq[i + p]`. Returns the smallest period in `AUTO_K_MIN..=k_max`
-/// clearing `PERIOD_MATCH_THRESHOLD` (the fundamental period, since multiples of
-/// the true period also score highly). Ported from trout's `detect_period`.
+/// Probability that two independently drawn bases of `seq` are identical
+/// (`Σ frequencyₐ²`) — the self-match rate expected by chance given the
+/// sequence's composition.
+fn chance_match_rate(seq: &[u8]) -> f64 {
+    let mut counts = [0usize; 256];
+    for &b in seq {
+        counts[b as usize] += 1;
+    }
+    let n = seq.len() as f64;
+    if n == 0.0 {
+        return 0.0;
+    }
+    counts.iter().map(|&c| (c as f64 / n).powi(2)).sum()
+}
+
+/// Detect the dominant tandem-repeat period in `seq`. For each candidate period
+/// it measures the self-shift match rate (`seq[i] == seq[i + p]`), corrects it
+/// for the sequence's base composition, and returns the smallest period whose
+/// corrected score clears [`PERIOD_SCORE_THRESHOLD`] — the fundamental period,
+/// since multiples of the true period also score highly. Adapted from trout's
+/// `detect_period`, with the composition correction added.
 pub fn detect_period(seq: &[u8], k_max: usize) -> Option<usize> {
     if seq.len() < 2 * k_max {
         return None;
     }
+    let chance = chance_match_rate(seq);
+    let denom = 1.0 - chance;
+    if denom <= f64::EPSILON {
+        return None; // homopolymer-like: no meaningful period
+    }
     for p in AUTO_K_MIN..=k_max {
         let total = seq.len() - p;
         let matches = (0..total).filter(|&i| seq[i] == seq[i + p]).count();
-        if matches as f64 / total as f64 >= PERIOD_MATCH_THRESHOLD {
+        let observed = matches as f64 / total as f64;
+        let score = (observed - chance) / denom;
+        if score >= PERIOD_SCORE_THRESHOLD {
             return Some(p);
         }
     }
     None
 }
 
-/// Infer k for one repeat locus, ported from trout's `detect_locus_k`.
+/// Infer k for one repeat locus by consensus.
 ///
-/// Cross-checks the reference allele (VCF REF — short but accurate) against the
-/// median-length allele (longer and more informative, but may carry sequence
-/// variation). When both yield a period we require agreement (strong evidence it
-/// is real); when only one has signal we trust it; when they disagree, or
-/// neither has signal, we fall back to the default. With `--table` input there
-/// is no REF, so detection rests on the median allele alone. Returns the k and a
+/// Adapted from trout's `detect_locus_k`. trout cross-checked the reference
+/// allele against a single median allele, but a single atypical allele could
+/// flip the result, making it sample-dependent. Instead we detect the period of
+/// the reference allele (VCF REF) *and* every allele, and take the most-voted
+/// period — robust to a few noisy alleles. Ties prefer the reference's period,
+/// then the smaller period. Falls back to the default when nothing yields a
+/// period (e.g. `--table` input with only impure sequences). Returns the k and a
 /// provenance label.
 pub fn detect_locus_k(records: &[RepeatRecord]) -> (usize, &'static str) {
     // REF is identical for every record of a locus.
@@ -54,24 +84,36 @@ pub fn detect_locus_k(records: &[RepeatRecord]) -> (usize, &'static str) {
         .map(|r| r.reference.as_str())
         .find(|s| !s.is_empty())
         .unwrap_or("");
-
-    // Median-length allele sequence.
-    let mut seqs: Vec<&str> = records
-        .iter()
-        .filter(|r| !r.sequence.is_empty())
-        .map(|r| r.sequence.as_str())
-        .collect();
-    seqs.sort_by_key(|s| s.len());
-    let median = seqs.get(seqs.len() / 2).copied().unwrap_or("");
-
     let p_ref = detect_period(ref_seq.as_bytes(), AUTO_K_MAX);
-    let p_med = detect_period(median.as_bytes(), AUTO_K_MAX);
-    match (p_ref, p_med) {
-        (Some(r), Some(m)) if r == m => (r, "detected"),
-        (Some(r), None) => (r, "detected"),
-        (None, Some(m)) => (m, "detected"),
-        _ => (AUTO_K_DEFAULT, "fallback"),
+
+    let mut votes: HashMap<usize, usize> = HashMap::new();
+    if let Some(p) = p_ref {
+        *votes.entry(p).or_default() += 1;
     }
+    for r in records {
+        if r.sequence.is_empty() {
+            continue;
+        }
+        if let Some(p) = detect_period(r.sequence.as_bytes(), AUTO_K_MAX) {
+            *votes.entry(p).or_default() += 1;
+        }
+    }
+
+    let Some(&max_votes) = votes.values().max() else {
+        return (AUTO_K_DEFAULT, "fallback");
+    };
+    let mut top: Vec<usize> = votes
+        .iter()
+        .filter(|(_, &v)| v == max_votes)
+        .map(|(&p, _)| p)
+        .collect();
+    top.sort_unstable();
+    // Tie-break: prefer the reference's period, otherwise the smallest.
+    let k = match p_ref {
+        Some(pr) if top.contains(&pr) => pr,
+        _ => top[0],
+    };
+    (k, "detected")
 }
 
 /// Return the lexicographically-smallest rotation of `kmer` together with all
@@ -231,6 +273,14 @@ mod tests {
     #[test]
     fn detect_period_pentamer() {
         let seq = "AAAATAAAATAAAATAAAATAAAAT".as_bytes();
+        assert_eq!(detect_period(seq, 6), Some(5));
+    }
+
+    #[test]
+    fn detect_period_arich_pentamer() {
+        // AAAAG is ~80% A; without composition correction the abundance of A
+        // lets short periods match by chance. Correction must still recover 5.
+        let seq = "AAAAGAAAAGAAAAGAAAAGAAAAGAAAAG".as_bytes();
         assert_eq!(detect_period(seq, 6), Some(5));
     }
 

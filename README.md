@@ -56,7 +56,7 @@ Run `aSTRonaut --help` for the full list. The most useful:
 | Option | What it does |
 |--------|--------------|
 | `--repeat chr:pos` | Plot a single repeat coordinate (default: all repeats found) |
-| `-k, --kmer` | Motif length to colour by (default 3). `-k auto` guesses it per repeat — a heuristic that can be wrong (see note below), so pass an explicit length to override |
+| `-k, --kmer` | Motif length to colour by (default 3). `-k auto` detects it per repeat (a heuristic; pass an explicit length to override) |
 | `-n, --number` | How many distinct motifs to colour (default 10) |
 | `--motifs AAAAG,AAGGG` | Colour these specific motifs instead of the most frequent ones |
 | `--sort` | Row order: `length` (default), `alphabetic`, or `motif` (cluster by composition) |
@@ -70,10 +70,10 @@ Run `aSTRonaut --help` for the full list. The most useful:
 Height auto-scales with the number of samples, so labels stay legible for large
 cohorts.
 
-> **A note on `-k auto`:** motif-length detection is a heuristic. It works well
-> for most loci, but composition bias can fool it — for very A-rich motifs (e.g.
-> RFC1's `AAAAG`) it sometimes reports a shorter motif than the true period. If a
-> plot's motifs look off, set the length explicitly (e.g. `-k 5`).
+> **A note on `-k auto`:** motif-length detection is a heuristic (it takes a
+> consensus across the alleles and corrects for base composition). It works well
+> across loci, but no heuristic is perfect — if a plot's motifs look off, set the
+> length explicitly with `-k`.
 
 ## Input and output
 

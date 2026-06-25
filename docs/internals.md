@@ -5,25 +5,37 @@ to *use* aSTRonaut — see the [README](../README.md) for that.
 
 ## Motif-length detection (`-k auto`)
 
-Ported from [trout](https://github.com/wdecoster/trout). For each locus it picks
-the smallest period in 2–6 whose self-shift match rate (fraction of positions
-where `seq[i] == seq[i + p]`) clears 0.65 — that is the fundamental period, since
-multiples of the true period also score highly. It cross-checks the reference
-allele (VCF `REF`, short but accurate) against the median-length allele (longer,
-more informative): if both yield a period they must agree, if only one has signal
-that one is trusted, otherwise it falls back to 3 (trinucleotide, the most common
-pathogenic motif length). With `--table` input there is no `REF`, so detection
-rests on the median allele alone. The chosen `k` is reported per locus on stderr.
+Adapted from [trout](https://github.com/wdecoster/trout). For a single sequence,
+`detect_period` measures the self-shift match rate (fraction of positions where
+`seq[i] == seq[i + p]`) for each candidate period 2–6 and returns the smallest
+one whose **composition-corrected** score clears a threshold — that is the
+fundamental period, since multiples of the true period also score highly.
 
-This is a heuristic and can be wrong. The 0.65 threshold is a compromise: it has
-to be low enough to recover GC-rich hexamers whose self-shift rate is suppressed
-by composition bias (C9orf72 `GGCCCC` scores ~0.75 at p=6), which means very
-A-rich motifs can clear it at a *shorter* period than the true one (RFC1 `AAAAG`
-is mostly A, so p=2/3 often pass on chance alone). A more robust scheme would
-correct the match rate for the sequence's base composition — score
-`(observed − expected_by_chance) / (1 − expected_by_chance)` rather than the raw
-rate — so A-richness no longer inflates short periods. For now, pass an explicit
-`-k` when auto-detection guesses wrong.
+The composition correction matters: the raw match rate is inflated by base bias
+(an A-rich motif like RFC1's `AAAAG` matches itself often just because most bases
+are A), which let short periods pass spuriously. So instead of the raw rate we
+score it above chance:
+
+```
+score = (observed − chance) / (1 − chance),   chance = Σ frequencyₐ²
+```
+
+`chance` is the probability two random bases of the sequence are equal, so
+composition cancels out: a pure repeat still scores ~1.0, GC-rich hexamers
+(C9orf72 `GGCCCC`) still clear it, and A-rich motifs no longer match at short
+periods.
+
+For a whole locus, `detect_locus_k` takes a **consensus** rather than trusting a
+single allele: it detects the period of the reference allele (VCF `REF`) and of
+every allele, and returns the most-voted period (ties prefer the reference's
+period, then the smaller one). This is robust to a few atypical alleles, so the
+result no longer depends on which cohort subset you happen to plot. It falls back
+to 3 (the most common pathogenic motif length) only when nothing yields a period.
+With `--table` input there is no `REF`, so the vote is over the alleles alone. The
+chosen `k` is reported per locus on stderr.
+
+It is still a heuristic and can occasionally be wrong; pass an explicit `-k` to
+override.
 
 ## Collapsing (`--collapse`)
 

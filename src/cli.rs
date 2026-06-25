@@ -64,9 +64,9 @@ pub struct Args {
     #[arg(long)]
     pub names: Option<String>,
 
-    /// Kmer length, or 'auto' to guess the motif length per locus from the data.
-    /// Auto-detection is a heuristic and can be wrong (e.g. for A-rich motifs);
-    /// pass an explicit length to override. Ignored with --motifs.
+    /// Kmer length, or 'auto' to detect the motif length per locus from the data.
+    /// Auto-detection is a heuristic; pass an explicit length to override it.
+    /// Ignored with --motifs.
     #[arg(short = 'k', long, default_value = "3")]
     pub kmer: KmerArg,
 
