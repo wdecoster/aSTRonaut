@@ -15,6 +15,16 @@ that one is trusted, otherwise it falls back to 3 (trinucleotide, the most commo
 pathogenic motif length). With `--table` input there is no `REF`, so detection
 rests on the median allele alone. The chosen `k` is reported per locus on stderr.
 
+This is a heuristic and can be wrong. The 0.65 threshold is a compromise: it has
+to be low enough to recover GC-rich hexamers whose self-shift rate is suppressed
+by composition bias (C9orf72 `GGCCCC` scores ~0.75 at p=6), which means very
+A-rich motifs can clear it at a *shorter* period than the true one (RFC1 `AAAAG`
+is mostly A, so p=2/3 often pass on chance alone). A more robust scheme would
+correct the match rate for the sequence's base composition — score
+`(observed − expected_by_chance) / (1 − expected_by_chance)` rather than the raw
+rate — so A-richness no longer inflates short periods. For now, pass an explicit
+`-k` when auto-detection guesses wrong.
+
 ## Collapsing (`--collapse`)
 
 Exact collapse hashes sequences into unique haplotypes with allele (and, with
