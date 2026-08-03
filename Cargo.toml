@@ -15,7 +15,7 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 flate2 = "1"
 noodles-vcf = "0.90"
-kuva = { version = "0.3", features = ["png", "pdf"] }
+kuva = { version = "0.4", features = ["png", "pdf"] }
 
 [profile.release]
 lto = true
