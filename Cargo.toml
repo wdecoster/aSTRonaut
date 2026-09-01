@@ -14,8 +14,8 @@ path = "src/main.rs"
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 flate2 = "1"
-noodles-vcf = "0.90"
-kuva = { version = "0.4", features = ["png", "pdf"] }
+noodles-vcf = "0.93"
+kuva = { version = "0.5", features = ["png", "pdf"] }
 
 [profile.release]
 lto = true
