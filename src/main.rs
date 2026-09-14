@@ -194,7 +194,9 @@ fn write_static(
             .with_scale(2.0)
             .render_scene(&scene)
             .map_err(|e| anyhow!(e))?,
-        "pdf" => PdfBackend.render_scene(&scene).map_err(|e| anyhow!(e))?,
+        "pdf" => PdfBackend::new()
+            .render_scene(&scene)
+            .map_err(|e| anyhow!(e))?,
         _ => unreachable!(),
     };
     fs::write(path, bytes)?;
